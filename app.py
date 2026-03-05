@@ -10,7 +10,6 @@ import shap
 import streamlit as st
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
-from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 
 
@@ -73,12 +72,23 @@ def train_models(df_feat: pd.DataFrame) -> ModelResults:
         "Vehicles_lag_2",
         "Vehicles_lag_24",
     ]
-    X = df_feat[features]
-    y = df_feat["Vehicles"]
+    train_parts = []
+    test_parts = []
+    for _, group in df_feat.groupby("Junction", sort=False):
+        if len(group) < 2:
+            raise ValueError("Setiap junction harus memiliki minimal 2 baris untuk train/test split berbasis waktu.")
+        split_idx = int(len(group) * 0.8)
+        split_idx = min(max(split_idx, 1), len(group) - 1)
+        train_parts.append(group.iloc[:split_idx])
+        test_parts.append(group.iloc[split_idx:])
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, shuffle=False
-    )
+    train_df = pd.concat(train_parts, ignore_index=True)
+    test_df = pd.concat(test_parts, ignore_index=True)
+
+    X_train = train_df[features]
+    y_train = train_df["Vehicles"]
+    X_test = test_df[features]
+    y_test = test_df["Vehicles"]
 
     xgb_model = XGBRegressor(
         n_estimators=400,
